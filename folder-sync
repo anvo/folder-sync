@@ -1,0 +1,71 @@
+#!/bin/bash
+# Inspired by anything-sync-daemon
+# By graysky <graysky AT archlinux DOT us>
+
+TMPFS="/run/shm"
+VERBOSE=0
+RSYNCOPT="-ax --delete-after"
+
+while getopts "vht:" OPTION
+do
+	case $OPTION in
+		v)
+			VERBOSE=1
+			;;
+		t)
+			TMPFS="$OPTARG"
+			;;
+		?)
+			echo "folder-sync [-v] [-t tmpfs] folder"
+			exit
+	esac
+done
+shift $(($OPTIND - 1)) #last arg
+
+FOLDER=`realpath $@`
+
+if [ -z "$@" ] || [ -z $FOLDER ]; then
+	echo "No folder given";
+	exit 1;
+fi
+
+
+
+echo "Syncing $FOLDER to tmpfs.";
+
+RAMDIR="$TMPFS/folder-sync$FOLDER"
+BACKUPDIR="$FOLDER-folder-sync"
+
+
+if [ "$VERBOSE" -gt "0" ]; then
+	echo "TMPFS = $TMPFS"
+	echo "FOLDER = $FOLDER"
+	echo "RAMDIR=$RAMDIR";
+	echo "BACKUPDIR=$BACKUPDIR";
+	RSYNCOPT="$RSYNCOPT --stats"
+fi
+
+
+#create folder
+install -d "$RAMDIR"
+#copy contents
+rsync $RSYNCOPT "$FOLDER/" "$RAMDIR/"
+#backup
+mv "$FOLDER" "$BACKUPDIR"
+#createlink
+ln -s "$RAMDIR" "$FOLDER"
+
+
+echo "Press [ENTER] to sync back to disk.";
+read next
+
+echo "Syncing $FOLDER back to disk.";
+
+#copy contents
+rsync $RSYNCOPT "$RAMDIR/" "$BACKUPDIR/"
+#delete link
+rm "$FOLDER"
+#move backup back
+mv "$BACKUPDIR" "$FOLDER" 
+#delete folder in tmpfs
+rm -rf "$RAMDIR/"
